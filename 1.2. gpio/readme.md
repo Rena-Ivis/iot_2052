@@ -402,3 +402,161 @@ void app_main(void)
 > 1. Поэкспериментируйте с различными вариантами частоты ШИМ.  
 > 2. Оцените, насколько регулирование яркости свечения светодиода комфортно для человеческого глаза (проверьте, незаметно ли мерцание).
 
+**Радуга**
+Светодиодный контроллер ШИМ ESP32 в высокоскоростном режиме  позволяем автоматически постепенно увеличивать или уменьшать скважности ШИМ без задействования процессора. Рассмотрим как можно сделать это в  в рамках следующего небольшого практикума. 
+
+Будем использовать RGB-светодиод, по сути содержащий в едином корпусе сразу три светодиода, только один обеспечивает формирование красного (R – Red) цвета свечения, второй – зелёного (G – Green), а третий – синего (B – Blue). Путём смешения этих трёх цветов можно получить любой цвет. Обычный RGB-светодиод имеет 4 вывода. Такие светодиоды могут иметь общий анод или общий катод. Именно RGB-светодид с общим катодом показан на рисунке ниже.
+![image](img/lights.jpg)
+В нашем учебном наборе присутствует RGB-светодиод в виде модуля, который можно подключать напрямую, как было со Свнтоформ. Подключим его к отладочной плате и заставим переливаться цветами радуги. Схема подключения RGB-светодиода к ESP32 будет не очень сложной.
+![image](img/lights.jpg)
+С применением макетной платы это могло бы выглядеть так.
+![image](img/lights.jpg)
+На самом деле радуга имеет множество цветов, а 7 цветов были придуманы только потому, что эти цвета наиболее устойчиво воспринимаются и определяются глазом, и мы можем их вспомнить и назвать их благодаря мнемонической фразе: «Каждый Охотник Желает Знать, Где Сидит Фазан». Список этих 7 основных цветов радуги с разложением по компонентам R, G и B представлен в таблице далее.
+| Цвет        | R   | G   | B   |
+|------------|-----|-----|-----|
+| Красный     | 255 | 0   | 0   |
+| Оранжевый   | 255 | 127 | 0   |
+| Желтый      | 255 | 255 | 0   |
+| Зелёный     | 0   | 255 | 0   |
+| Голубой     | 0   | 255 | 255 |
+| Синий       | 0   | 0   | 255 |
+| Фиолетовый  | 255 | 0   | 255 |
+Алгоритм работы программы будет весьма простым.
+
+1. Примем за начальную точку отсчета красный цвет (255, 0, 0).
+2. Будем постепенно увеличивать значение зелёной составляющей G, пока не достигнем значения оранжевого (255, 127, 0).
+3. Продолжим увеличивать значение зелёной составляющей до достижения жёлтого цвета (255, 255, 0).
+4. Постепенно уменьшаем значение красной составляющей R до нуля и получаем значения зеленого цвета (0, 255, 0).
+5. Постепенно увеличиваем значение синей составляющей B до значения голубого цвета (0, 255, 255).
+6. Постепенно уменьшаем зелёную составляющую G до нуля и формирования значения синего цвета (0, 0, 255).
+7. Постепенно увеличиваем красную составляющую R до значения фиолетового цвета (255, 0, 255).
+8. Постепенно уменьшаем синию составляющую B до получения красного цвета (255, 0, 0).
+9. Переходим к шагу 2.
+
+В программе создадим три высокоскоростных ШИМ-канала. Поскольку управлять всеми компонентами цвета мы будем одновременно, имеет смысл использовать один единственный аппаратный таймер для всех трёх каналов.
+
+Для реализации выше представленного алгоритма воспроизведём в программе цифровой автомат, где отдельные его состояния будут соответствовать формированию очередного цвета. Трансформацию цвета будем осуществлять за одну секунду.
+
+Для того, чтобы светодиодный контроллер LEDC мог постепенно изменять скважность, нужно активировать эту возможность функцией `ledc_fade_func_install()`. Новые параметры свечения светодиодов задаются вызовом одной из функций `ledc_set_fade_with_time()`, `ledc_set_fade_with_step()` или `ledc_set_fade()`, а чтобы внесённые изменения вступили в силу, нужно вызвать функцию `ledc_fade_start()`. Работа этой функции может происходить либо в блокирующем, либо в неблокирующем режиме. Мы будем использовать блокирующий режим, и по окончании всех метаморфоз с установлением цвета переходить к формированию нового.
+
+```c
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/ledc.h"
+#include "esp_err.h"
+
+#define LEDC_TIMER          LEDC_TIMER_0
+#define LEDC_MODE           LEDC_HIGH_SPEED_MODE
+#define LEDC_GPIO_R         GPIO_NUM_33
+#define LEDC_CHANNEL_R      LEDC_CHANNEL_0
+#define LEDC_GPIO_G         GPIO_NUM_25
+#define LEDC_CHANNEL_G      LEDC_CHANNEL_1
+#define LEDC_GPIO_B         GPIO_NUM_26
+#define LEDC_CHANNEL_B      LEDC_CHANNEL_2
+
+#define LEDC_DUTY_RES       LEDC_TIMER_13_BIT
+#define LEDC_FADE_TIME      1000
+
+// Переобразование R, G или B каналов в коэффициент заполнения с учетом разрешающей способности
+#define RGB_TO_DUTY(x)  ((x) * (1 << LEDC_DUTY_RES) / 255)
+
+void app_main(void)
+{
+    ledc_timer_config_t ledc_timer = {
+        .duty_resolution = LEDC_DUTY_RES,
+        .freq_hz = 4000,
+        .speed_mode = LEDC_MODE,
+        .timer_num = LEDC_TIMER,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    ledc_timer_config(&ledc_timer);
+
+    ledc_channel_config_t ledc_channel_r = {
+        .channel    = LEDC_CHANNEL_R,
+        .duty       = 0,
+        .gpio_num   = LEDC_GPIO_R,
+        .speed_mode = LEDC_MODE,
+        .hpoint     = 0,
+        .timer_sel  = LEDC_TIMER,
+        .flags.output_invert = 0
+    };
+    ledc_channel_config_t ledc_channel_g = {
+            .channel    = LEDC_CHANNEL_G,
+            .duty       = 0,
+            .gpio_num   = LEDC_GPIO_G,
+            .speed_mode = LEDC_MODE,
+            .hpoint     = 0,
+            .timer_sel  = LEDC_TIMER,
+            .flags.output_invert = 0
+    };
+    ledc_channel_config_t ledc_channel_b = {
+            .channel    = LEDC_CHANNEL_B,
+            .duty       = 0,
+            .gpio_num   = LEDC_GPIO_B,
+            .speed_mode = LEDC_MODE,
+            .hpoint     = 0,
+            .timer_sel  = LEDC_TIMER,
+            .flags.output_invert = 0
+    };
+    ledc_channel_config(&ledc_channel_r);
+    ledc_channel_config(&ledc_channel_g);
+    ledc_channel_config(&ledc_channel_b);
+
+    // Initialize fade service.
+    ledc_fade_func_install(0);
+
+    uint8_t state = 0;
+    while (1)
+    {
+        switch(state++)
+        {
+            case 0: // Красный, rgb(255, 0, 0)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                break;
+            case 1: // Оранжевый, rgb(255, 127, 0)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY(127), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                break;
+            case 2: // Желтый, rgb(255, 255, 0)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                break;
+            case 3: // Зеленый , rgb(0, 255, 0)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                break;
+            case 4: // Голубой, rgb(0, 255, 255)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                break;
+            case 5: // Синий, rgb(0, 0, 255)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                break;
+            case 6: // Фиолетовый, rgb(255, 0, 255)
+                ledc_set_fade_with_time(ledc_channel_r.speed_mode, ledc_channel_r.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_g.speed_mode, ledc_channel_g.channel, RGB_TO_DUTY( 0 ), LEDC_FADE_TIME);
+                ledc_set_fade_with_time(ledc_channel_b.speed_mode, ledc_channel_b.channel, RGB_TO_DUTY(255), LEDC_FADE_TIME);
+                break;
+        }
+        state %= 7;
+        ledc_fade_start(ledc_channel_r.speed_mode, ledc_channel_r.channel, LEDC_FADE_WAIT_DONE);
+        ledc_fade_start(ledc_channel_g.speed_mode, ledc_channel_g.channel, LEDC_FADE_WAIT_DONE);
+        ledc_fade_start(ledc_channel_b.speed_mode, ledc_channel_b.channel, LEDC_FADE_WAIT_DONE);
+    }
+}
+```
+> [!TIP]
+> **Задание**
+>
+> Можно заметить, что вызов трёх функций `ledc_set_fade_with_time()` на каждом шаге работы программы является избыточным.  
+>
+> Осуществите рефакторинг кода, устранив указанное недоразумение.
