@@ -239,7 +239,7 @@ static void adc_calibration_deinit(adc_cali_handle_t handle)
 >Задания
 >Добавьте в программу перевод отсчетов АЦП в величину измеряемого напряжения на основе формул, представленных как в предыдущем, так и в этом практикуме, и сравните результаты.
 
-### 2.1.1. Датчик света
+### 2.1.3. Датчик света
 
 Необходимое оборудование: Световой сенсор
 
@@ -249,26 +249,71 @@ static void adc_calibration_deinit(adc_cali_handle_t handle)
 
 ***Код программы:***
 
-light_sensor.cpp:
-```cpp
-#include "mbed.h"
+ Пример кода для датчика света (ESP32 + АЦП)
 
-//AnalogIn - класс для считывания внешнего напряжения, приложенного к аналоговому входному выводу. 
-//PA_1 - порт, к которому подключен световой сенсор
-AnalogIn light_sensor(PA_1);
+```c
+## Пример кода для датчика освещённости (ESP32 + АЦП + калибровка)
 
-int main()
+```c
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+
+// Выбираем АЦП
+#define ADC_UNIT                    ADC_UNIT_1
+#define ADC_CHANNEL                 ADC_CHANNEL_4     // пример: GPIO32
+#define ADC_ATTENUATION             ADC_ATTEN_DB_12   // до 3.3 В
+
+static bool adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
+static void adc_calibration_deinit(adc_cali_handle_t handle);
+
+void app_main(void)
 {
-	float res;
-	while (true) {
-	
-		//считывание светового сигнала
-		res = light_sensor.read()*100; 
-		printf("%2.2f\n",res);
-		
-		//сон за указанный период времени в мс
-		thread_sleep_for(1000);
-	}
+    static int adc_raw;
+    static int voltage;
+
+    // Инициализация АЦП
+    adc_oneshot_unit_handle_t adc_handle;
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+
+    // Настройка канала
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTENUATION,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &config));
+    
+    // Калибровка
+    adc_cali_handle_t adc_calibration_handle = NULL;
+    bool do_calibration = adc_calibration_init(ADC_UNIT, ADC_CHANNEL, ADC_ATTENUATION, &adc_calibration_handle);
+    
+    while (1) {
+        // Сырые данные
+        ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, ADC_CHANNEL, &adc_raw));
+        printf("ADC%d Channel[%d] Raw Data: %d\n", ADC_UNIT + 1, ADC_CHANNEL, adc_raw);
+
+        if (do_calibration) {
+            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_calibration_handle, adc_raw, &voltage));
+            printf("ADC%d Channel[%d] Voltage: %d mV\n", ADC_UNIT + 1, ADC_CHANNEL, voltage);
+
+            // Уровень освещенности (условно 0–100%)
+            int light_level = (voltage * 100) / 3300;
+            printf("Light level: %d %%\n", light_level);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    // Очистка (никогда не выполнится в этом примере)
+    ESP_ERROR_CHECK(adc_oneshot_del_unit(adc_handle));
+    if (do_calibration) {
+        adc_calibration_deinit(adc_calibration_handle);
+    }
 }
 ```
 ***Результат работы программы:***
@@ -276,7 +321,6 @@ int main()
 ![](img/2.jpg)
 
 После запуска программы в консоль выводятся строки, показывающие уровень освещения в пределах от 0 до 100.
-В данной лабораторной работе возникла проблема с выводом значений типа float. Для ее исправления необходимо зайти в файл mbed_lib.json и изменить в блоке «minimal-printf-enable-floating-point» значение «value» с false на true.
 
 ![](img/3.jpg)
 
