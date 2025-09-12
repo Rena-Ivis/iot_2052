@@ -322,51 +322,202 @@ void app_main(void)
 
 После запуска программы в консоль выводятся строки, показывающие уровень освещения в пределах от 0 до 100.
 
-![](img/3.jpg)
+### 2.1.4 Сканер I²C
+В рамках данного практикума будем работать с компонентами устройств интернета вещей, которые соединяются между собой при помощи цифровых протоколов связи. Одним из самых популярных способов соединения чипов внутри устройства  является применение интерфейса последовательной синхронной связи I²C. При использовании такого интерфейса все устройства соединяются параллельно, а ведущее устройство может обмениваться данными с ведомыми по их адресам. Напомним, что такие адреса задаются производителем чипа, и в некоторых случаях в них можно изменить несколько бит, чтобы не возникало конфликтов на шине.
 
-### 2.1.2. Акселерометр
+В нашем распоряжении есть несколько сенсоров с интерфейсом I²C, наприер:
+- Акселерометр на основе ADXL345
+- Датчик температуры, влажности и атмосферного давления BME280
+Соединим все эти модули в шину.
+
+![](img/4.jpg)
+
+Микроконтроллер в нашей работе выступает в роли ведущего устройства (мастера), а датчики – ведомых (слейвов). Как вы помните, для того, чтобы контроллер мог с ними общаться, ему нужно знать адреса ведомых устройств. 
+
+В нашей простой программе, листинг которой приводится далее, подключаем работу с драйвером шины I²C в режиме мастера, включив заголовочный файл `driver/i2c_master.h`. Далее, создаём ведущее устройство на шине I²C вызовом функции `i2c_new_master_bus()`, в которую передаём дескриптор создаваемого устройства и заполненную структуру типа `i2c_master_bus_config_t`, определяющую параметры работы шины, включая информацию о GPIO, использующихся для связи. В нашем случае `GPIO22` – это линия SCL, а `GPIO21` – линия SDA. 
+
+При необходимости можно включить внутренние подтягивающие резисторы, но так как на используемых модулях они уже установлены, делать этого не будем. Затем в цикле перебираем все возможные 127 адресов ведомых устройств, и вызовом функции `i2c_master_probe()` пытаемся установить с ними соединение. Если таковое достигнуто, то выводим информацию об адресе обнаруженного на шине устройства. Если в течение 50 мс устройство с указанным адресом не отвечает, то пытаемся установить связь со следующим. 
+
+По окончании цикла удаляем ведущее устройство шины функцией `i2c_del_master_bus()`, и программа завершает свою работу.
+
+```c
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_err.h"
+#include "driver/i2c_master.h"
+
+#define I2C_TIMEOUT_VALUE_MS (50)
+
+void app_main(void)
+{
+    i2c_master_bus_config_t i2c_mst_config = {
+        .clk_source = I2C_CLK_SRC_DEFAULT,
+        .i2c_port = I2C_NUM_0,
+        .scl_io_num = GPIO_NUM_22,
+        .sda_io_num = GPIO_NUM_21,
+        .glitch_ignore_cnt = 7,
+        .flags.enable_internal_pullup = false,
+    };
+    i2c_master_bus_handle_t bus_handle;
+    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
+
+    printf("Scanning the bus...\r\n\r\n");
+    uint8_t address;
+    printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\r\n");
+    for (int i = 0; i < 128; i += 16)
+    {
+        printf("%02x: ", i);
+        for (int j = 0; j < 16; j++)
+        {
+            fflush(stdout);
+            address = i + j;
+            esp_err_t ret = i2c_master_probe(bus_handle, address, I2C_TIMEOUT_VALUE_MS);
+            if (ret == ESP_OK)
+                printf("%02x ", address);
+            else 
+                if (ret == ESP_ERR_TIMEOUT)
+                    printf("UU ");
+                else
+                    printf("-- ");
+        }
+        printf("\r\n");
+    }
+    i2c_del_master_bus(bus_handle);
+}
+```
+> [!TIP]
+> ** Задание **
+> Попеременно отключая и подключая модули датчиков, определите адреса ведомых устройств (они вам понадобятся в дальнейшем).
+
+### 2.1.4. Акселерометр
 
 Необходимое оборудование: отладочная плата акселерометра на основе ADXL345.
 
 ![](img/4.jpg)
 
 Интерфейс подключения: I2C
-[Библиотека](https://os.mbed.com/users/peterswanson87/code/ADXL345_I2C/file/d9412b56f98a/ADXL345_I2C.h/)
-
 
 ***Код программы:***
+Пример работы с ADXL345 через I²C (ESP32)
 
-accelerometer.cpp:
-```cpp
-#include "mbed.h"
-#include "ADXL345_I2C.h"
+```c
+#include <stdio.h>
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/i2c.h"
+#include "esp_log.h"
 
-ADXL345_I2C accelerometer(I2C_SDA,I2C_SCL); //I2C sda and scl
+#define I2C_MASTER_SCL_IO           22     // GPIO для SCL
+#define I2C_MASTER_SDA_IO           21     // GPIO для SDA
+#define I2C_MASTER_NUM              I2C_NUM_0
+#define I2C_MASTER_FREQ_HZ          100000 // 100kHz
+#define I2C_MASTER_TX_BUF_DISABLE   0
+#define I2C_MASTER_RX_BUF_DISABLE   0
 
-int main()
+#define ADXL345_ADDR                0x53   // Адрес ADXL345 (SDO на GND)
+#define ADXL345_REG_POWER_CTL       0x2D
+#define ADXL345_REG_DATA_FORMAT     0x31
+#define ADXL345_REG_DATAX0          0x32
+
+static const char *TAG = "ADXL345";
+
+// Инициализация I2C
+esp_err_t i2c_master_init()
 {
-	int readings[3] = {0,0,0};
-	printf("Starting ADXL345 text...\n");
-	
-	//Перейдите в режим ожидания, чтобы настроить устройство.
-	accelerometer.setPowerControl(0x00);
-	
-	// Полное разрешение, +/- 16 г, 4 мг / младший бит.
-	accelerometer.setDataFormatControl(0x0B);
-	
-	// Скорость передачи данных 3.2 кГц.
-	accelerometer.setDataRate(ADXL345_3200HZ);
-	
-	// Режим измерения.
-	accelerometer.setPowerControl(0x08);
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+    esp_err_t err = i2c_param_config(I2C_MASTER_NUM, &conf);
+    if (err != ESP_OK) return err;
+    return i2c_driver_install(I2C_MASTER_NUM, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+}
 
-	while(1){
-		thread_sleep_for(1000);
-		accelerometer.getOutput(readings);
-		
-		// 13-битные, знаковые расширенные значения.
-		printf("%i, %i, %i\n",(int16_t)readings[0],(int16_t)readings[1],(int16_t)readings[2]);
-	}
+// Запись одного байта в регистр ADXL345
+esp_err_t adxl345_write_reg(uint8_t reg_addr, uint8_t data)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    esp_err_t err;
+
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADXL345_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, reg_addr, true);
+    i2c_master_write_byte(cmd, data, true);
+    i2c_master_stop(cmd);
+
+    err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+// Чтение нескольких байт из регистра ADXL345
+esp_err_t adxl345_read_regs(uint8_t reg_addr, uint8_t *data, size_t len)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    esp_err_t err;
+
+    // Отправляем адрес регистра
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADXL345_ADDR << 1) | I2C_MASTER_WRITE, true);
+    i2c_master_write_byte(cmd, reg_addr, true);
+
+    // Запрос чтения
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, (ADXL345_ADDR << 1) | I2C_MASTER_READ, true);
+    if (len > 1) {
+        i2c_master_read(cmd, data, len - 1, I2C_MASTER_ACK);
+    }
+    i2c_master_read_byte(cmd, data + len - 1, I2C_MASTER_NACK);
+    i2c_master_stop(cmd);
+
+    err = i2c_master_cmd_begin(I2C_MASTER_NUM, cmd, pdMS_TO_TICKS(1000));
+    i2c_cmd_link_delete(cmd);
+    return err;
+}
+
+void app_main(void)
+{
+    esp_err_t err = i2c_master_init();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "I2C init failed: %s", esp_err_to_name(err));
+        return;
+    }
+    ESP_LOGI(TAG, "I2C initialized");
+
+    // Инициализация ADXL345
+    err = adxl345_write_reg(ADXL345_REG_POWER_CTL, 0x08);  // Включаем измерения
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ADXL345 POWER_CTL write failed");
+        return;
+    }
+
+    err = adxl345_write_reg(ADXL345_REG_DATA_FORMAT, 0x08); // FULL_RES, +-2g
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ADXL345 DATA_FORMAT write failed");
+        return;
+    }
+
+    while (1) {
+        uint8_t data[6];
+        err = adxl345_read_regs(ADXL345_REG_DATAX0, data, 6);
+        if (err == ESP_OK) {
+            int16_t x = (int16_t)((data[1] << 8) | data[0]);
+            int16_t y = (int16_t)((data[3] << 8) | data[2]);
+            int16_t z = (int16_t)((data[5] << 8) | data[4]);
+
+            ESP_LOGI(TAG, "Accel X: %d, Y: %d, Z: %d", x, y, z);
+        } else {
+            ESP_LOGE(TAG, "Error reading accelerometer data: %s", esp_err_to_name(err));
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
 ```
 ***Результат работы программы:***
@@ -382,34 +533,67 @@ int main()
 ![](img/6.jpg)
 
 Интерфейс подключения: Аналоговый
-[Библиотека](https://os.mbed.com/users/NickRyder/code/RangeFinder/)
 
+Принцип работы
+
+1. **TRIG**: микроконтроллер подаёт короткий импульс (~10 µс) на вход TRIG датчика.  
+2. Датчик посылает ультразвуковую волну.  
+3. **ECHO**: датчик выдаёт длительный импульс, пропорциональный времени прохождения волны туда и обратно.  
+4. **Расчёт расстояния**:  
+\[
+\text{distance\_cm} = \frac{\text{duration\_us}}{2 \cdot 29.1}
+\]  
+
+- `duration_us` — время в микросекундах между посылкой и приёмом эха.  
+- Делим на 2, потому что сигнал проходит туда и обратно.  
+- Результат выражается в сантиметрах.
 
 ***Код программы:***
 
-range_finder.cpp:
 ```cpp
-#include "mbed.h"
-#include "RangeFinder.h"
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "esp_log.h"
 
-//Указываем pio(PA_1), scale(10), pulsetime(5000), timeout(100000)
-RangeFinder rf(PA_1,10,5000,100000);
+#define TRIG_GPIO 5
+#define ECHO_GPIO 18
 
-int main()
+static const char *TAG = "HC-SR04";
+
+void app_main(void)
 {
-	float d;
-	while(1){
-		d = rf.read_m();
-		if(d == -1.0){ // если есть ошибки подключения
-			printf("Timeout Error.\n");
-		}else if(d > 5.0){ // если расстояние до объекта слишком большое
-			printf("No objects within detection range.\n");
-		}else{
-			printf("Distance = %f m.\n",d);
-		}
-		thread_sleep_for(500);
-	}
+    // Настройка GPIO
+    gpio_reset_pin(TRIG_GPIO);
+    gpio_set_direction(TRIG_GPIO, GPIO_MODE_OUTPUT);
+    gpio_reset_pin(ECHO_GPIO);
+    gpio_set_direction(ECHO_GPIO, GPIO_MODE_INPUT);
+
+    while (1) {
+        // Генерация импульса для TRIG
+        gpio_set_level(TRIG_GPIO, 0);
+        ets_delay_us(2);
+        gpio_set_level(TRIG_GPIO, 1);
+        ets_delay_us(10);
+        gpio_set_level(TRIG_GPIO, 0);
+
+        // Измерение длительности импульса на ECHO
+        int64_t start = esp_timer_get_time();
+        while (gpio_get_level(ECHO_GPIO) == 0);
+        int64_t pulse_start = esp_timer_get_time();
+        while (gpio_get_level(ECHO_GPIO) == 1);
+        int64_t pulse_end = esp_timer_get_time();
+
+        int64_t duration_us = pulse_end - pulse_start;
+        float distance_cm = (duration_us / 2.0f) / 29.1f;
+
+        ESP_LOGI(TAG, "Distance: %.2f cm", distance_cm);
+
+        vTaskDelay(pdMS_TO_TICKS(500));
+    }
 }
+
 ```
 ***Результат работы программы:***
 
