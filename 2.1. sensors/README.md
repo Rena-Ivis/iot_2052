@@ -89,6 +89,156 @@ void app_main(void)
 > **Задание**
 > Добавьте в программу перевод отсчетов АЦП в величину измеряемого напряжения.
 
+### 2.1.2  Калиброванные значения АЦП
+
+АЦП в ESP32 сравнивает входное аналоговое напряжение с опорным и определяет код результата. Считается, что опорное напряжение АЦП для ESP32 составляет 1100 мВ, однако истинное опорное напряжение может варьироваться от 1000 мВ до 1200 мВ среди различных чипов. Более того, зависимость количества отсчетов АЦП от измеряемого входного напряжения не является линейной.
+
+![](img/1.jpg)
+
+Существует нижняя зона нечувствительности около 0,13 В, прежде чем АЦП начинает регистрировать значения, а свыше 2,5  В характеристика АЦП становится нелинейной. Очевидно, что АЦП ESP32 непригоден для использования ниже 0,13 В и неточен свыше 2,5 В. При этом в диапазоне измеряемых значений от 0,21 В до 2,53 В точность АЦП превышает 1%!
+
+В целом такая характеристика может быть описана кусочно-линейными уравнениями и диапазон точных значений может быть расширен (от 0,14 В до 3,1 В).
+Формула для расчёта напряжения:
+
+U_изм = {
+    0.0008 * D_изм + 0.1372,   если D_изм ≤ 3000  
+    0.0005 * D_изм + 1.0874,   если D_изм > 3000
+}
+
+Чтобы минимизировать влияние различных опорных напряжений и обеспечить получение более точных выходных результатов может быть задействован драйвер калибровки АЦП (ADC Calibration Driver).
+
+В самом простом случае этот драйвер обеспечивает задание необходимых углов наклона и смещений отрезков кусочно-линейного преобразования кодов АЦП в величину измеренного напряжения на основе данных, зашитых производителем микроконтроллера в его ПЗУ. В простых моделях ESP32 поддерживается только линейная схема калибровки, а в более сложных, например ESP32-C3 или ESP32-H2, значения измеряемого напряжения определяются на основе калибровочной кривой. Потенциально даже можно описать такую кривую самостоятельно на основе отдельной процедуры калибровки, обеспечив тем самым лучшие результаты преобразований АЦП.
+
+Чтобы использовать драйвер калибровки, необходимо создать дескриптор схемы калибровки и вызвать функцию `adc_calibration_init()`.  
+Затем вызов функции `adc_cali_raw_to_voltage()` обеспечит более точное преобразование необработанных данных АЦП в напряжение.
+
+Приведём код для той же схемы, что была задействована в предыдущем практикуме:
+```c
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
+
+// Выбираем АЦП
+#define ADC_UNIT                    ADC_UNIT_1
+#define ADC_CHANNEL                 ADC_CHANNEL_4
+#define ADC_ATTENUATION             ADC_ATTEN_DB_12
+
+static bool adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle);
+static void adc_calibration_deinit(adc_cali_handle_t handle);
+
+void app_main(void)
+{
+    static int adc_raw;
+    static int voltage;
+
+    // Инициализация АЦП
+    adc_oneshot_unit_handle_t adc_handle;
+    adc_oneshot_unit_init_cfg_t init_config = {
+        .unit_id = ADC_UNIT,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config, &adc_handle));
+
+    // Настройка АЦП
+    adc_oneshot_chan_cfg_t config = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT,
+        .atten = ADC_ATTENUATION,
+    };
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc_handle, ADC_CHANNEL, &config));
+    
+    // Калибровка АЦП
+    adc_cali_handle_t adc_calibration_handle = NULL;
+    bool do_calibration = adc_calibration_init(ADC_UNIT, ADC_CHANNEL, ADC_ATTENUATION, &adc_calibration_handle);
+    
+    while (1) {
+        // Чтение "сырых" данных
+        ESP_ERROR_CHECK(adc_oneshot_read(adc_handle, ADC_CHANNEL, &adc_raw));
+        printf("ADC%d Channel[%d] Raw Data: %d\n", ADC_UNIT + 1, ADC_CHANNEL, adc_raw);
+
+        if (do_calibration) {
+            // Если АЦП откалиброван, то вывести значение в милливольтах
+            ESP_ERROR_CHECK(adc_cali_raw_to_voltage(adc_calibration_handle, adc_raw, &voltage));
+            printf("ADC%d Channel[%d] Calibrated Voltage: %d mV\n", ADC_UNIT + 1, ADC_CHANNEL, voltage);
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+
+    // Никогда не будет выполнено, но удаляем всё, что создали
+    ESP_ERROR_CHECK(adc_oneshot_del_unit(adc_handle));
+    if (do_calibration) {
+        adc_calibration_deinit(adc_calibration_handle);
+    }
+}
+
+/*---------------------------------------------------------------
+        Калибровка АЦП
+---------------------------------------------------------------*/
+static bool adc_calibration_init(adc_unit_t unit, adc_channel_t channel, adc_atten_t atten, adc_cali_handle_t *out_handle)
+{
+    adc_cali_handle_t handle = NULL;
+    esp_err_t ret = ESP_FAIL;
+    bool calibrated = false;
+
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    if (!calibrated) {
+        printf("Calibration scheme is \"Curve Fitting\"\n");
+        adc_cali_curve_fitting_config_t cali_config = {
+            .unit_id = unit,
+            .chan = channel,
+            .atten = atten,
+            .bitwidth = ADC_BITWIDTH_DEFAULT,
+        };
+        ret = adc_cali_create_scheme_curve_fitting(&cali_config, &handle);
+        if (ret == ESP_OK) {
+            calibrated = true;
+        }
+    }
+#endif
+#if ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    if (!calibrated) {
+        printf("Calibration scheme is \"Line Fitting\"\n");
+        adc_cali_line_fitting_config_t cali_config = {
+            .unit_id = unit,
+            .atten = atten,
+            .bitwidth = ADC_BITWIDTH_DEFAULT,
+        };
+        ret = adc_cali_create_scheme_line_fitting(&cali_config, &handle);
+        if (ret == ESP_OK) {
+            calibrated = true;
+        }
+    }
+#endif
+
+    *out_handle = handle;
+    if (ret == ESP_OK) {
+        printf("Calibration Success\n");
+    } else if (ret == ESP_ERR_NOT_SUPPORTED || !calibrated) {
+        printf("eFuse not burnt, skip software calibration\n");
+    } else {
+        printf("Invalid arg or no memory\n");
+    }
+
+    return calibrated;
+}
+
+static void adc_calibration_deinit(adc_cali_handle_t handle)
+{
+#if ADC_CALI_SCHEME_CURVE_FITTING_SUPPORTED
+    printf("deregister \"Curve Fitting\" calibration scheme\n");
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_curve_fitting(handle));
+
+#elif ADC_CALI_SCHEME_LINE_FITTING_SUPPORTED
+    printf("deregister \"Line Fitting\" calibration scheme\n");
+    ESP_ERROR_CHECK(adc_cali_delete_scheme_line_fitting(handle));
+#endif
+}
+```
+>[!TIP]
+>Задания
+>Добавьте в программу перевод отсчетов АЦП в величину измеряемого напряжения на основе формул, представленных как в предыдущем, так и в этом практикуме, и сравните результаты.
+
 ### 2.1.1. Датчик света
 
 Необходимое оборудование: Световой сенсор
