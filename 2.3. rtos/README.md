@@ -213,4 +213,4 @@ void app_main(void)
 >5. Измерения и управление светодиодом должно осуществляться в разных задачах.
 
 
-  TODO: нет картинок (https://www.freertos.org/Documentation/01-FreeRTOS-quick-start/01-Beginners-guide/01-RTOS-fundamentals) и нет реального кода + форматирование блоков (NOTE, WARNING)
+ <!-- TODO: нет картинок (https://www.freertos.org/Documentation/01-FreeRTOS-quick-start/01-Beginners-guide/01-RTOS-fundamentals) и нет реального кода + форматирование блоков (NOTE, WARNING) -->
