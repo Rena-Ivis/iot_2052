@@ -526,7 +526,7 @@ void app_main(void)
 
 После запуска программы в консоль выводятся строки, показывающие угол наклона акселерометра по трем осям по отношению к земной поверхности.
 
-### 2.1.3. Дальномер
+### 2.1.5. Дальномер
 
 Необходимое оборудование: дальномер Grove Ultrasonic Ranger.
 
@@ -600,3 +600,57 @@ void app_main(void)
 ![](img/7.jpg)
 
 После запуска программы в консоль выводятся строки, показывающие расстояние до объектов.
+
+### 2.1.5 4. Датчик температуры, влажности и атмосферного давления BME280
+
+На этот раз будем получать данные с датчика температуры, давления и влажности воздуха BME280 по цифровой шине I²C. Любое ведомое I²C-устройство обладает множеством команд, пересылаемых на уровне интерфейса шины и обеспечивающих информационный обмен с ведущим устройством, но работать в таком режиме не очень удобно. Будем использовать высокоуровневый подход, тем более, что фреймворки ESP-IDF и ESP-IoT-Solution предоставляют такую возможность.
+Добавим компоненты из фреймворка ESP-IoT-Solution, для этого откроем терминал (![](img/7.jpg)) и в терминале введём команду: `idf.py add-dependency "espressif/bme280=*"` 
+Теперь можно использовать код для работы с датчиком:
+
+```c
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "i2c_bus.h"
+#include "bme280.h"
+
+#define I2C_MASTER_SCL_IO   GPIO_NUM_22
+#define I2C_MASTER_SDA_IO   GPIO_NUM_21
+#define I2C_MASTER_FREQ_HZ  100000
+#define I2C_BME280_ADDR     BME280_I2C_ADDRESS_DEFAULT
+
+void app_main(void)
+{
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+    i2c_bus_handle_t i2c_bus = i2c_bus_create(I2C_NUM_0, &conf);
+    bme280_handle_t bme280 = bme280_create(i2c_bus, I2C_BME280_ADDR);
+
+    printf("BME280 Test\n");
+    bme280_default_init(bme280);
+
+    float temperature = 0.0, humidity = 0.0, pressure = 0.0;
+    while (1)
+    {
+        if (ESP_OK == bme280_read_temperature(bme280, &temperature)) {
+            printf("Temperature: %f ", temperature);
+        }
+        if (ESP_OK == bme280_read_humidity(bme280, &humidity)) {
+            printf("Humidity: %f ", humidity);
+        }
+        if (ESP_OK == bme280_read_pressure(bme280, &pressure)) {
+            printf("Pressure: %f\n", pressure);
+        }
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+
+    bme280_delete(&bme280);
+    i2c_bus_delete(&i2c_bus);
+}
+```
