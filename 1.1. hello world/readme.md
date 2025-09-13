@@ -68,8 +68,9 @@ void app_main(void)
 
 Полезные ресурсы:
 - [Wokwi](https://wokwi.com/projects/new/esp-idf-esp32) - эмулятор работы микроконтролера и ряда компонентов
-  Залить .bin: F1 -> Upload Firmware and Start Simulation
+  Залить .bin: F1 -> Upload Firmware and Start Simulation -> выбрать нужный .bin файл 
 - [PICSimLab - Prog. IC Simulator Lab.](https://sourceforge.net/projects/picsim/) - офлайн эмулятор
+  Залить .bin: щелкнуть на изображение микроконтроллера -> выбрать нужный .bin файл 
 
 ## 1.3 Blink — встроенный светодиод
 На отладочной плате, входящей в учебный набор, присутствует светодиод, подключенный к порту GPIO2. Для начала будем управлять им. Конечно, это будет классика в мире программирования микроконтроллеров – программа Blink, мигающая светодиодом.
