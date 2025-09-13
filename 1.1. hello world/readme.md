@@ -68,6 +68,7 @@ void app_main(void)
 
 Полезные ресурсы:
 - [Wokwi](https://wokwi.com/projects/new/esp-idf-esp32) - эмулятор работы микроконтролера и ряда компонентов
+  Залить .bin: F1 -> Upload Firmware and Start Simulation
 - [PICSimLab - Prog. IC Simulator Lab.](https://sourceforge.net/projects/picsim/) - офлайн эмулятор
 
 ## 1.3 Blink — встроенный светодиод
