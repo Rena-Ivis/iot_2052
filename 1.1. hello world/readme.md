@@ -68,9 +68,9 @@ void app_main(void)
 11. Программируем микроконтроллер – заливаем прошивку. Информацию об окончании процесса загрузки прошивки (Flash Done) можно увидеть на вкладке OUTPUT и во всплывающем окне. Переходим к монитору последовательного порта, к которому подключена плата – именно через него на вкладке TERMINAL можно наблюдать вывод программы.
 
 Полезные ресурсы:
-- [Wokwi](https://wokwi.com/projects/new/esp-idf-esp32) - эмулятор работы микроконтролера и ряда компонентов
+- [Wokwi](https://wokwi.com/projects/new/esp-idf-esp32) - эмулятор работы микроконтролера и ряда компонентов  
   Залить .bin: F1 -> Upload Firmware and Start Simulation -> выбрать нужный .bin файл 
-- [PICSimLab - Prog. IC Simulator Lab.](https://sourceforge.net/projects/picsim/) - офлайн эмулятор
+- [PICSimLab - Prog. IC Simulator Lab.](https://sourceforge.net/projects/picsim/) - офлайн эмулятор  
   Залить .bin: щелкнуть на изображение микроконтроллера -> выбрать нужный .bin файл 
 
 ## 1.1.2 Blink — встроенный светодиод
