@@ -114,6 +114,66 @@ void app_main(void)
   }
 }
 ```
+> [!WARNING]  
+> На плате esp32s3 uno нет встроенного простого светодиода, поэтому для этого примера предлагается воспользоваться внешним светодиодом, например модулем светофора (подробнее работа с модудем в след л/р). 
+> <details>
+  <summary>Однако на полате присутствует адресный rgb светодиод, которым можно тоже поуправлять</summary>
+  
+  Esp32s3 UNO оснащен WS2812 - адресным rgb светодиодом, взаимодействовать с которым можно через специальную библиотеку `led_strip`
+  Подключить библиотеки можно изменив файл `CMakeLists.txt` прописав библиотеке в сторче `REQUIRES`  
+
+  Файл `CMakeLists.txt` для данной программы:
+    
+    ```
+    idf_component_register(SRCS "main.c"
+                    INCLUDE_DIRS "."
+                    REQUIRES driver led_strip)
+    ```
+
+  Программа:
+  
+    ```c
+      #include "freertos/FreeRTOS.h" // Для функции vTaskDelay
+      #include "freertos/task.h"
+      #include "led_strip.h"  // API для адресных диодов (WS2812, SK6812 и т.д.)
+      #include "driver/rmt_tx.h" // Драйвер RMT для точного тайминга сигналов
+      
+      #define LED_GPIO 48 // GPIO, к которому подключён один диод
+      
+      void app_main(void)
+      {
+          led_strip_handle_t strip; // Объект управления лентой/диодом
+      
+          // Создание объекта управления WS2812 через RMT
+          // led_strip_config_t создаёт конфигурацию диодов (тип, количество)
+          // led_strip_rmt_config_t создаёт конфигурацию RMT (GPIO, канал)
+          ESP_ERROR_CHECK(led_strip_new_rmt_device(
+              &(led_strip_config_t){.max_leds = 1, .strip_gpio_num = LED_GPIO, .led_model = LED_MODEL_WS2812}, // 1 диод, GPIO и модель WS2812
+              &(led_strip_rmt_config_t){
+                  .clk_src = RMT_CLK_SRC_DEFAULT, // можно использовать RMT_CLK_SRC_DEFAULT
+                  .resolution_hz = 0,             // 0 = по умолчанию 10 МГц
+                  .mem_block_symbols = 0,         // стандартное количество символов
+                  .flags = {.with_dma = 0}        // DMA не используем
+              },
+              &strip // Сюда записывается созданный объект
+              ));
+      
+          while (1)
+          {
+              // Устанавливаем цвет первого (и единственного) диода на красный (R,G,B) 0-255
+              ESP_ERROR_CHECK(led_strip_set_pixel(strip, 0, 5, 0, 0));
+              ESP_ERROR_CHECK(led_strip_refresh(strip)); // Отправляем данные на диод, чтобы он загорелся
+              vTaskDelay(pdMS_TO_TICKS(1000));        // Задержка 1 секунда
+      
+              // Меняем цвет диода на синий
+              ESP_ERROR_CHECK(led_strip_set_pixel(strip, 0, 0, 0, 5));
+              ESP_ERROR_CHECK(led_strip_refresh(strip)); // Обновляем диод
+              vTaskDelay(pdMS_TO_TICKS(1000));        // Задержка 1 секунда
+          }
+      }
+    ```
+</details>
+
 
 > [!TIP]
 > **Задание для самостоятельной реализации**  
