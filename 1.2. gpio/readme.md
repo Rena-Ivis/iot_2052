@@ -75,9 +75,9 @@ typedef struct {
 #include "driver/gpio.h"
 
 // пины подключения светодиодов
-#define     LED_RED     33
-#define     LED_YELLOW  25
-#define     LED_GREEN   26
+#define     LED_RED     12
+#define     LED_YELLOW  13
+#define     LED_GREEN   11
 #define     GPIO_PINS   ((1ULL << LED_RED) | (1ULL << LED_YELLOW) | (1ULL << LED_GREEN))
 
 void app_main(void)
