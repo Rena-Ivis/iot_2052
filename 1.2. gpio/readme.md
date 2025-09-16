@@ -620,22 +620,48 @@ void app_main(void)
 ![image](img/shield.png)  
 
 Каждому подключению на плате BaseShield соответствуют определенные пины на плате ESP32  
-| BaseShield (Arduino Uno) | ESP32 Uno GPIO    | Комментарии                     |
-|--------------------------|-------------------|--------------------------------|
-| D0 (RX)                  | GPIO3 (RX0)       | Аппаратный UART RX             |
-| D1 (TX)                  | GPIO1 (TX0)       | Аппаратный UART TX             |
-| D2                       | GPIO16            |                                |
-| D3 (PWM)                 | GPIO17 (PWM)      |                                |
-| D4                       | GPIO4             |                                |
-| D5 (PWM)                 | GPIO5 (PWM)       |                                |
-| D6 (PWM)                 | GPIO18 (PWM)      |                                |
-| D7                       | GPIO19            |                                |
-| D8                       | GPIO21            |                                |
-| D9 (PWM)                 | GPIO22 (PWM)      |                                |
-| A0                       | GPIO36 (VP)       | Аналоговый вход                |
-| A1                       | GPIO39 (VN)       | Аналоговый вход                |
-| A2                       | GPIO34            | Аналоговый вход                |
-| A3                       | GPIO35            | Аналоговый вход                |
+| BaseShield | ESP32-S3 GPIO | Тип            |
+| ---------- | ------------- | -------------- |
+| D0 (RX)    | RX            | Digital / UART |
+| D1 (TX)    | TX            | Digital / UART |
+| D2         | 18            | Digital        |
+| D3         | 17            | Digital        |
+| D4         | 19            | Digital        |
+| D5         | 20            | Digital        |
+| D6         | 3             | Digital        |
+| D7         | 14            | Digital        |
+| D8         | 21            | Digital        |
+| D9         | 46            | Digital        |
+| D10        | 10            | Digital        |
+| D11        | 11            | Digital        |
+| D12        | 13            | Digital        |
+| D13        | 12            | Digital        |
+| A0         | 2             | Analog         |
+| A1         | 1             | Analog         |
+| A2         | 7             | Analog         |
+| A3         | 6             | Analog         |
+| A4         | 5             | Analog         |
+| A5         | 4             | Analog         |
+| SDA (I2C)  | 8             | I2C            |
+| SCL (I2C)  | 9             | I2C            |
+
+Сокращённая таблица BaseShield (только те, что подписаны жирным шрифтом)
+
+| BaseShield | ESP32-S3 GPIO | Тип     |
+| ---------- | ------------- | ------- |
+| D2         | 18            | Digital |
+| D3         | 17            | Digital |
+| D4         | 19            | Digital |
+| D5         | 20            | Digital |
+| D6         | 3             | Digital |
+| D7         | 14            | Digital |
+| D8         | 21            | Digital |
+| A0         | 2             | Analog  |
+| A1         | 1             | Analog  |
+| A2         | 7             | Analog  |
+| A3         | 6             | Analog  |
+| I2C SDA    | 8             | I2C     |
+| I2C SCL    | 9             | I2C     |
 
 > [!IMPORTANT]
 > На ESP32 Uno некоторые пины могут отличаться в зависимости от производителя платы.  
