@@ -131,6 +131,7 @@ idf_component_register(SRCS "main.c"
                         INCLUDE_DIRS "."
                         REQUIRES driver led_strip)
 ```
+Также не забудьте открыть терминал (иконка внизу) и прописать команду `idf.py add-dependency "espressif/led_strip^3.0.1~1"`
 Программа для управления диодом:
 
 ```c
