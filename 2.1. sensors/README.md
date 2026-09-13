@@ -665,3 +665,447 @@ void app_main(void)
     i2c_bus_delete(&i2c_bus);
 }
 ```
+
+> [!TIP]
+> **Задание для самостоятельной реализации**  
+> Сравните приведенный пример с первой программой `Hello World` и добавьте вывод сообщений в консоль на каждой итерации цикла, сообщающих текущее состояние светодиода.
+
+
+>[!TIP]
+>OLED-дисплей - НЕ ОБЯЗАТКЛЬНО К ВЫПОЛНЕНИЮ
+><details>
+  <summary>В наборе присутствует монохромный дисплей высокой контрастности с углами обзора более 160°.  Разрешение 128×64 пикселей. Матрица дисплея подключена к встроенному чипу SSD1306 – драйверу с интерфейсом I²C.</summary>
+
+Будем использовать ту же самую библиотеку (i2c_bus) для работы с шиной I²C. Её можно подключить также, как мы это делали ранее – вручную или с использованием утилиты idf.py, как делали это с драйверами датчиков:
+
+```idf.py add-dependency "espressif/i2c_bus=*"```
+
+Для работы с самим дисплеем тоже необходим драйвер, и такой драйвер имеется непосредственно в составе фреймворка ESP-IDF. Это esp_lcd_panel. В итоге после того, как будут установлены необходимые компоненты, действия в программе будут следующими: 
+
+Подключить необходимые заголовочные файлы.
+Инициализировать I2C.
+Создать и инициализировать дисплей SSD1306 с помощью драйвера в esp_lcd.
+Использовать функции API esp_lcd для рисования на дисплее.
+Следует оговориться, что «рисования на дисплее» предполагает создание битового образа в памяти (буфера), и уже именно он выводится средствами API на сам дисплей. Чтобы выполняемые действия были более понятны, создадим ряд вспомогательных функций для работы с графическим буфером, а также будем использовать растровый шрифт размером 5×8 пикселей для вывода текста. Листинг получившегося приложения представлен ниже. Он достаточно подробно прокомментирован, так что разобраться с тем, как происходит работа с OLED-дисплеем, не должно составить большого труда.
+Программа для вывода текста:
+
+```c
+#include <stdio.h>
+#include <string.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "i2c_bus.h"
+#include "esp_log.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_vendor.h"
+#include "esp_lcd_panel_ops.h"
+
+#define TAG "SSD1306_DEMO"
+
+// Настройки I2C
+#define I2C_MASTER_SCL_IO   GPIO_NUM_22
+#define I2C_MASTER_SDA_IO   GPIO_NUM_21
+#define I2C_MASTER_FREQ_HZ  400000
+#define I2C_MASTER_NUM      I2C_NUM_0
+
+// Настройки дисплея
+#define SSD1306_I2C_ADDRESS 0x3C
+#define SCREEN_WIDTH        128
+#define SCREEN_HEIGHT       64
+
+// Простой шрифт 5x8 (каждый символ 5 байт)
+static const uint8_t font_5x8[][5] = {
+    {0x00, 0x00, 0x00, 0x00, 0x00}, // space
+    {0x00, 0x00, 0x5F, 0x00, 0x00}, // !
+    {0x00, 0x07, 0x00, 0x07, 0x00}, // "
+    {0x14, 0x7F, 0x14, 0x7F, 0x14}, // #
+    {0x24, 0x2A, 0x7F, 0x2A, 0x12}, // $
+    {0x23, 0x13, 0x08, 0x64, 0x62}, // %
+    {0x36, 0x49, 0x55, 0x22, 0x50}, // &
+    {0x00, 0x05, 0x03, 0x00, 0x00}, // '
+    {0x00, 0x1C, 0x22, 0x41, 0x00}, // (
+    {0x00, 0x41, 0x22, 0x1C, 0x00}, // )
+    {0x14, 0x08, 0x3E, 0x08, 0x14}, // *
+    {0x08, 0x08, 0x3E, 0x08, 0x08}, // +
+    {0x00, 0x50, 0x30, 0x00, 0x00}, // ,
+    {0x08, 0x08, 0x08, 0x08, 0x08}, // -
+    {0x00, 0x60, 0x60, 0x00, 0x00}, // .
+    {0x20, 0x10, 0x08, 0x04, 0x02}, // /
+    {0x3E, 0x51, 0x49, 0x45, 0x3E}, // 0
+    {0x00, 0x42, 0x7F, 0x40, 0x00}, // 1
+    {0x42, 0x61, 0x51, 0x49, 0x46}, // 2
+    {0x21, 0x41, 0x45, 0x4B, 0x31}, // 3
+    {0x18, 0x14, 0x12, 0x7F, 0x10}, // 4
+    {0x27, 0x45, 0x45, 0x45, 0x39}, // 5
+    {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 6
+    {0x01, 0x71, 0x09, 0x05, 0x03}, // 7
+    {0x36, 0x49, 0x49, 0x49, 0x36}, // 8
+    {0x06, 0x49, 0x49, 0x29, 0x1E}, // 9
+    {0x00, 0x36, 0x36, 0x00, 0x00}, // :
+    {0x00, 0x56, 0x36, 0x00, 0x00}, // ;
+    {0x08, 0x14, 0x22, 0x41, 0x00}, // <
+    {0x14, 0x14, 0x14, 0x14, 0x14}, // =
+    {0x00, 0x41, 0x22, 0x14, 0x08}, // >
+    {0x02, 0x01, 0x51, 0x09, 0x06}, // ?
+    {0x32, 0x49, 0x79, 0x41, 0x3E}, // @
+    {0x7E, 0x11, 0x11, 0x11, 0x7E}, // A
+    {0x7F, 0x49, 0x49, 0x49, 0x36}, // B
+    {0x3E, 0x41, 0x41, 0x41, 0x22}, // C
+    {0x7F, 0x41, 0x41, 0x22, 0x1C}, // D
+    {0x7F, 0x49, 0x49, 0x49, 0x41}, // E
+    {0x7F, 0x09, 0x09, 0x09, 0x01}, // F
+    {0x3E, 0x41, 0x49, 0x49, 0x7A}, // G
+    {0x7F, 0x08, 0x08, 0x08, 0x7F}, // H
+    {0x00, 0x41, 0x7F, 0x41, 0x00}, // I
+    {0x20, 0x40, 0x41, 0x3F, 0x01}, // J
+    {0x7F, 0x08, 0x14, 0x22, 0x41}, // K
+    {0x7F, 0x40, 0x40, 0x40, 0x40}, // L
+    {0x7F, 0x02, 0x0C, 0x02, 0x7F}, // M
+    {0x7F, 0x04, 0x08, 0x10, 0x7F}, // N
+    {0x3E, 0x41, 0x41, 0x41, 0x3E}, // O
+    {0x7F, 0x09, 0x09, 0x09, 0x06}, // P
+    {0x3E, 0x41, 0x51, 0x21, 0x5E}, // Q
+    {0x7F, 0x09, 0x19, 0x29, 0x46}, // R
+    {0x46, 0x49, 0x49, 0x49, 0x31}, // S
+    {0x01, 0x01, 0x7F, 0x01, 0x01}, // T
+    {0x3F, 0x40, 0x40, 0x40, 0x3F}, // U
+    {0x1F, 0x20, 0x40, 0x20, 0x1F}, // V
+    {0x3F, 0x40, 0x38, 0x40, 0x3F}, // W
+    {0x63, 0x14, 0x08, 0x14, 0x63}, // X
+    {0x07, 0x08, 0x70, 0x08, 0x07}, // Y
+    {0x61, 0x51, 0x49, 0x45, 0x43}, // Z
+    {0x00, 0x7F, 0x41, 0x41, 0x00}, // [
+    {0x02, 0x04, 0x08, 0x10, 0x20}, // backslash
+    {0x00, 0x41, 0x41, 0x7F, 0x00}, // ]
+    {0x04, 0x02, 0x01, 0x02, 0x04}, // ^
+    {0x40, 0x40, 0x40, 0x40, 0x40}, // _
+    {0x00, 0x01, 0x02, 0x04, 0x00}, // `
+    {0x20, 0x54, 0x54, 0x54, 0x78}, // a
+    {0x7F, 0x48, 0x44, 0x44, 0x38}, // b
+    {0x38, 0x44, 0x44, 0x44, 0x20}, // c
+    {0x38, 0x44, 0x44, 0x48, 0x7F}, // d
+    {0x38, 0x54, 0x54, 0x54, 0x18}, // e
+    {0x08, 0x7E, 0x09, 0x01, 0x02}, // f
+    {0x0C, 0x52, 0x52, 0x52, 0x3E}, // g
+    {0x7F, 0x08, 0x04, 0x04, 0x78}, // h
+    {0x00, 0x44, 0x7D, 0x40, 0x00}, // i
+    {0x20, 0x40, 0x44, 0x3D, 0x00}, // j
+    {0x7F, 0x10, 0x28, 0x44, 0x00}, // k
+    {0x00, 0x41, 0x7F, 0x40, 0x00}, // l
+    {0x7C, 0x04, 0x18, 0x04, 0x78}, // m
+    {0x7C, 0x08, 0x04, 0x04, 0x78}, // n
+    {0x38, 0x44, 0x44, 0x44, 0x38}, // o
+    {0x7C, 0x14, 0x14, 0x14, 0x08}, // p
+    {0x08, 0x14, 0x14, 0x18, 0x7C}, // q
+    {0x7C, 0x08, 0x04, 0x04, 0x08}, // r
+    {0x48, 0x54, 0x54, 0x54, 0x20}, // s
+    {0x04, 0x3F, 0x44, 0x40, 0x20}, // t
+    {0x3C, 0x40, 0x40, 0x20, 0x7C}, // u
+    {0x1C, 0x20, 0x40, 0x20, 0x1C}, // v
+    {0x3C, 0x40, 0x30, 0x40, 0x3C}, // w
+    {0x44, 0x28, 0x10, 0x28, 0x44}, // x
+    {0x0C, 0x50, 0x50, 0x50, 0x3C}, // y
+    {0x44, 0x64, 0x54, 0x4C, 0x44}, // z
+    {0x00, 0x08, 0x36, 0x41, 0x00}, // {
+    {0x00, 0x00, 0x7F, 0x00, 0x00}, // |
+    {0x00, 0x41, 0x36, 0x08, 0x00}, // }
+    {0x08, 0x08, 0x2A, 0x1C, 0x08}, // ->
+    {0x08, 0x1C, 0x2A, 0x08, 0x08}  // <-
+};
+
+// Универсальная установка пикселя
+static inline void set_pixel(uint8_t *buffer, int x, int y) {
+    if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT)
+        return;
+    buffer[x + (y / 8) * SCREEN_WIDTH] |= (1 << (y % 8));
+}
+
+// Функция для вывода символа
+void draw_char(uint8_t *buffer, char c, int x, int y) {
+    if (c < 32 || c > 126) return; // Проверка на допустимый символ
+    
+    const uint8_t *char_data = font_5x8[c - 32];
+    
+    for (int col = 0; col < 5; col++) {
+        uint8_t col_data = char_data[col];
+        for (int row = 0; row < 8; row++) {
+            if (col_data & (1 << row)) {
+                int pixel_x = x + col;
+                int pixel_y = y + row;
+                if (pixel_x < SCREEN_WIDTH && pixel_y < SCREEN_HEIGHT) {
+                    buffer[pixel_x + (pixel_y / 8) * SCREEN_WIDTH] |= (1 << (pixel_y % 8));
+                }
+            }
+        }
+    }
+}
+
+// Функция для вывода строки
+void draw_string(uint8_t *buffer, const char *str, int x, int y) {
+    int current_x = x;
+    while (*str) {
+        draw_char(buffer, *str, current_x, y);
+        current_x += 6; // 5 пикселей символ + 1 пиксель пробел
+        str++;
+        if (current_x >= SCREEN_WIDTH - 5) break;
+    }
+}
+
+// Функция очистки экрана
+void clear_screen(uint8_t *buffer) {
+    memset(buffer, 0x00, SCREEN_WIDTH * SCREEN_HEIGHT / 8);
+}
+
+// Функция очистки области экрана
+void clear_rect(uint8_t *buffer, int x, int y, int width, int height) {
+    for (int row = y; row < y + height; row++) {
+        for (int col = x; col < x + width; col++) {
+            if (col >= 0 && col < SCREEN_WIDTH && row >= 0 && row < SCREEN_HEIGHT) {
+                buffer[col + (row / 8) * SCREEN_WIDTH] &= ~(1 << (row % 8));
+            }
+        }
+    }
+}
+
+// Функция для удаления символа в позиции pos
+void delete_char_at(uint8_t *buffer, int x, int y, int pos, const char *text) {
+    int char_width = 6; // 5 пикселей символ + 1 пробел
+    
+    // Вычисляем координаты удаляемого символа
+    int char_x = x + pos * char_width;
+    
+    // Очищаем область символа (5x8 пикселей)
+    for (int col = char_x; col < char_x + 5; col++) {
+        for (int row = y; row < y + 8; row++) {
+            if (col < SCREEN_WIDTH && row < SCREEN_HEIGHT) {
+                buffer[col + (row / 8) * SCREEN_WIDTH] &= ~(1 << (row % 8));
+            }
+        }
+    }
+    
+    // Сдвигаем оставшиеся символы влево
+    for (int i = pos; text[i + 1] != '\0'; i++) {
+        // Очищаем область для нового символа
+        for (int col = char_x; col < char_x + 5; col++) {
+            for (int row = y; row < y + 8; row++) {
+                if (col < SCREEN_WIDTH && row < SCREEN_HEIGHT) {
+                    buffer[col + (row / 8) * SCREEN_WIDTH] &= ~(1 << (row % 8));
+                }
+            }
+        }
+        
+        // Рисуем следующий символ на место текущего
+        draw_char(buffer, text[i + 1], char_x, y);
+        
+        // Переходим к следующей позиции
+        char_x += char_width;
+    }
+    
+    // Очищаем область последнего символа (теперь он пустой)
+    for (int col = char_x; col < char_x + 5; col++) {
+        for (int row = y; row < y + 8; row++) {
+            if (col < SCREEN_WIDTH && row < SCREEN_HEIGHT) {
+                buffer[col + (row / 8) * SCREEN_WIDTH] &= ~(1 << (row % 8));
+            }
+        }
+    }
+}
+
+// Функция для рисования линии
+void draw_line(uint8_t *buffer, int x0, int y0, int x1, int y1) {
+    int dx = abs(x1 - x0);
+    int dy = abs(y1 - y0);
+    int sx = (x0 < x1) ? 1 : -1;
+    int sy = (y0 < y1) ? 1 : -1;
+    int err = dx - dy;
+
+    while (1) {
+        if (x0 >= 0 && x0 < SCREEN_WIDTH && y0 >= 0 && y0 < SCREEN_HEIGHT) {
+            buffer[x0 + (y0 / 8) * SCREEN_WIDTH] |= (1 << (y0 % 8));
+        }
+
+        if (x0 == x1 && y0 == y1) break;
+
+        int e2 = 2 * err;
+        if (e2 > -dy) {
+            err -= dy;
+            x0 += sx;
+        }
+        if (e2 < dx) {
+            err += dx;
+            y0 += sy;
+        }
+    }
+}
+
+// Функция для переворота дисплея на 180 градусов
+void set_display_rotation(esp_lcd_panel_io_handle_t io_handle, bool flipped) {
+    if (flipped) {
+        // Переворот на 180 градусов:
+        // 0xA1 - сегменты справа налево (горизонтальный переворот)
+        // 0xC8 - строки снизу вверх (вертикальный переворот)
+        uint8_t flip_commands[] = {
+            0xA1,  // Set Segment Re-map (сегменты справа налево)
+            0xC8   // Set COM Output Scan Direction (строки снизу вверх)
+        };
+        
+        for (int i = 0; i < sizeof(flip_commands); i++) {
+            esp_lcd_panel_io_tx_param(io_handle, flip_commands[i], NULL, 0);
+        }
+    } else {
+        // Нормальная ориентация:
+        uint8_t normal_commands[] = {
+            0xA0,  // Set Segment Re-map (сегменты слева направо)
+            0xC0   // Set COM Output Scan Direction (строки сверху вниз)
+        };
+        
+        for (int i = 0; i < sizeof(normal_commands); i++) {
+            esp_lcd_panel_io_tx_param(io_handle, normal_commands[i], NULL, 0);
+        }
+    }
+}
+
+void app_main(void)
+{
+    ESP_LOGI(TAG, "Инициализация I2C");
+    // Инициализация I2C шины
+    i2c_config_t i2c_bus_config = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = I2C_MASTER_SDA_IO,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_io_num = I2C_MASTER_SCL_IO,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
+        .master.clk_speed = I2C_MASTER_FREQ_HZ,
+    };
+    i2c_bus_handle_t i2c_bus = i2c_bus_create(I2C_MASTER_NUM, &i2c_bus_config);
+    if (i2c_bus == NULL) {
+        ESP_LOGE(TAG, "Не удалось создать I2C шину");
+        return;
+    }
+
+    // Конфигурация IO для LCD
+    esp_lcd_panel_io_i2c_config_t io_config = {
+        .dev_addr = SSD1306_I2C_ADDRESS,
+        .scl_speed_hz = I2C_MASTER_FREQ_HZ,
+        .control_phase_bytes = 1,
+        .dc_bit_offset = 6,
+        .lcd_cmd_bits = 8,
+        .lcd_param_bits = 8,
+        .on_color_trans_done = NULL,
+        .user_ctx = NULL,
+        .flags = {
+            .dc_low_on_data = 0,
+            .disable_control_phase = 0
+        }
+    };
+    esp_lcd_panel_io_handle_t io_handle = NULL;
+    ESP_ERROR_CHECK(esp_lcd_new_panel_io_i2c(i2c_bus_get_internal_bus_handle(i2c_bus), &io_config, &io_handle));
+
+    // Конфигурация панели SSD1306
+    esp_lcd_panel_handle_t panel_handle = NULL;
+    esp_lcd_panel_dev_config_t panel_config = {
+        .bits_per_pixel = 1,
+        .reset_gpio_num = -1,
+    };
+    esp_lcd_panel_ssd1306_config_t ssd1306_config = {
+        .height = SCREEN_HEIGHT,
+    };
+    panel_config.vendor_config = &ssd1306_config;
+    ESP_ERROR_CHECK(esp_lcd_new_panel_ssd1306(io_handle, &panel_config, &panel_handle));
+
+    // Инициализация дисплея
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
+    
+    // Развернуть дисплей на 180 градусов
+    set_display_rotation(io_handle, true);
+
+    // Создаем буфер для графики
+    uint8_t *buffer = heap_caps_malloc(SCREEN_WIDTH * SCREEN_HEIGHT / 8, MALLOC_CAP_DMA);
+    if (!buffer) {
+        ESP_LOGE(TAG, "Не удалось выделить буфер!");
+        return;
+    }
+
+    ESP_LOGI(TAG, "Дисплей инициализирован, начинаем демонстрацию");
+
+    int counter = 0;
+    char temp_str[20];
+
+    while (1) {
+        // Демонстрация 1: Текст
+        clear_screen(buffer);
+        draw_string(buffer, "ESP-IDF v5.5", 0, 0);
+        draw_string(buffer, "SSD1306 Demo", 0, 10);
+
+        snprintf(temp_str, sizeof(temp_str), "Counter: %d", counter++);
+        draw_string(buffer, temp_str, 0, 20);
+        draw_string(buffer, "Hello World!", 0, 40);
+        draw_string(buffer, "OLED Display", 0, 50);
+
+        ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, buffer));
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // Демонстрация 2: Графика + текст
+        clear_screen(buffer);
+        draw_string(buffer, "Graphics Test", 0, 0);
+
+        // Рисуем рамку
+        for (int x = 10; x < SCREEN_WIDTH - 10; x++) {
+            buffer[x + (10 / 8) * SCREEN_WIDTH] |= (1 << (10 % 8));
+            buffer[x + ((SCREEN_HEIGHT - 10) / 8) * SCREEN_WIDTH] |= (1 << ((SCREEN_HEIGHT - 10) % 8));
+        }
+        for (int y = 10; y < SCREEN_HEIGHT - 10; y++) {
+            buffer[10 + (y / 8) * SCREEN_WIDTH] |= (1 << (y % 8));
+            buffer[SCREEN_WIDTH - 11 + (y / 8) * SCREEN_WIDTH] |= (1 << (y % 8));
+        }
+
+        // Рисуем диагональные линии
+        draw_line(buffer, 15, 15, SCREEN_WIDTH - 15, SCREEN_HEIGHT - 15);
+        draw_line(buffer, SCREEN_WIDTH - 15, 15, 15, SCREEN_HEIGHT - 15);
+
+        draw_string(buffer, "Lines & Frame", 30, 25);
+
+        ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, buffer));
+        vTaskDelay(pdMS_TO_TICKS(2000));
+
+        // Демонстрация 3: Анимация
+        clear_screen(buffer);
+        draw_string(buffer, "Animation", 40, 0);
+
+        for (int i = 0; i < 8; i++) {
+            int x = 20 + i * 12;
+            int height = 10 + (i * 3);
+
+            for (int y = SCREEN_HEIGHT - 10; y > SCREEN_HEIGHT - 10 - height; y--) {
+                for (int bar_width = 0; bar_width < 8; bar_width++) {
+                    buffer[(x + bar_width) + (y / 8) * SCREEN_WIDTH] |= (1 << (y % 8));
+                }
+            }
+            clear_rect(buffer, 0, 56, SCREEN_WIDTH, 8);            
+            snprintf(temp_str, sizeof(temp_str), "Frame: %d", i + 1);
+            // snprintf(temp_str, sizeof(temp_str), "Frame: %d", counter % 100);
+            draw_string(buffer, temp_str, 20, 56);
+            ESP_ERROR_CHECK(esp_lcd_panel_draw_bitmap(panel_handle, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, buffer));
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+        vTaskDelay(pdMS_TO_TICKS(1500));
+    }
+
+    // Очистка ресурсов
+    free(buffer);
+    esp_lcd_panel_del(panel_handle);
+    esp_lcd_panel_io_del(io_handle);
+
+    // Удаляем шину
+    i2c_bus_delete(&i2c_bus);
+}
+```
+>[!TIP]
+>Если нужно сделать красивый дисплей для устройства на базе практически любого микроконтроллера (ESP32, STM32 и т.д.), то стандартом de facto для создания современных графических интерфейсов на микроконтроллерах является библиотека LVGL – Light and Versatile Graphics Library. Она сочетает в себе невероятную эффективность использования ресурсов с мощным и современным API. 
+>
+>Официальный сайт: https://lvgl.io/
+>GitHub: https://github.com/lvgl/lvgl
+</details>
