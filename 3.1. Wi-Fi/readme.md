@@ -476,7 +476,7 @@ nc -vlk 12345
 ``` bash
 ncat -vlk 12345
 ```
-![Запуск TCP-сервера Ncat в Windows](img/windows_ncat_listen.png)
+![Запуск TCP-сервера Ncat в Windows](img/windows_ncat.png)
 
 
 Будет запущен TCP-сервер, ожидающий подключения на порту `12345`.
@@ -486,7 +486,7 @@ ncat -vlk 12345
 ``` text
 Hello from ESP32
 ```
-![Получение сообщения от ESP32 в Ncat](img/windows_ncat_hello.png)
+![Получение сообщения от ESP32 в Ncat](img/windows_ncat_listner.png)
 
 
 ### Вариант со смартфоном Android
@@ -495,7 +495,7 @@ Hello from ESP32
 
 **Netcat for Android**
 
-![Запуск Ncat на Android](img/android_ncat.png)
+![Запуск Ncat на Android](img/android_netcat.png)
 
 **NetPal**
 
