@@ -493,13 +493,20 @@ Hello from ESP32
 
 В оригинальном материале также показаны варианты запуска TCP-сервера на Android.
 
-**Netcat for Android**
-
-<img src="img/android_netcat.png" alt="Запуск Ncat" height="400">
-
-**NetPal**
-
-<img src="img/android_netpal.png" alt="Запуск Ncat" height="400">
+<table>
+  <tr>
+    <th>Netcat for Android</th>
+    <th>NetPal</th>
+  </tr>
+  <tr>
+    <td>
+      <img src="img/android_netcat.png" alt="Запуск Ncat" height="400">
+    </td>
+    <td>
+      <img src="img/android_netpal.png" alt="Запуск NetPal" height="400">
+    </td>
+  </tr>
+</table>
 
 Если в консоли сервера ввести короткий текст и нажать Enter, он будет передан ESP32-S3 UNO и отображён в терминале платы.
 
