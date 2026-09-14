@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="350" viewBox="0 0 1100 350">
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#666"/></marker></defs>
+<text x="550" y="42" text-anchor="middle" font-family="Arial" font-size="28" font-weight="bold">ESP32 как MQTT-клиент</text>
+<rect x="40" y="110" width="220" height="110" rx="16" fill="#f5f5f5" stroke="#666"/>
+<text x="150" y="150" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">MQTTX / Panel</text>
+<text x="150" y="185" text-anchor="middle" font-family="Arial" font-size="18">публикует команду</text>
+<rect x="330" y="90" width="220" height="150" rx="16" fill="#eef6ff" stroke="#3b6ea8"/>
+<text x="440" y="145" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold">Mosquitto</text>
+<text x="440" y="180" text-anchor="middle" font-family="Arial" font-size="18">ПК студента</text>
+<text x="440" y="210" text-anchor="middle" font-family="Arial" font-size="18">порт 1883</text>
+<rect x="620" y="90" width="220" height="150" rx="16" fill="#f5f5f5" stroke="#666"/>
+<text x="730" y="145" text-anchor="middle" font-family="Arial" font-size="25" font-weight="bold">ESP32-S3 UNO</text>
+<text x="730" y="180" text-anchor="middle" font-family="Arial" font-size="18">MQTT_EVENT_DATA</text>
+<text x="730" y="210" text-anchor="middle" font-family="Arial" font-size="18">разбор команды</text>
+<rect x="910" y="110" width="150" height="110" rx="16" fill="#f5f5f5" stroke="#666"/>
+<text x="985" y="150" text-anchor="middle" font-family="Arial" font-size="24" font-weight="bold">PWM</text>
+<text x="985" y="185" text-anchor="middle" font-family="Arial" font-size="18">LED / RGB</text>
+<line x1="260" y1="165" x2="325" y2="165" stroke="#666" stroke-width="4" marker-end="url(#a)"/>
+<line x1="550" y1="165" x2="615" y2="165" stroke="#666" stroke-width="4" marker-end="url(#a)"/>
+<line x1="840" y1="165" x2="905" y2="165" stroke="#666" stroke-width="4" marker-end="url(#a)"/>
+<text x="550" y="300" text-anchor="middle" font-family="Arial" font-size="20">iot_practice/local/lamp → on / off</text>
+<text x="550" y="330" text-anchor="middle" font-family="Arial" font-size="20">iot_practice/local/lamp/value → 0..100</text>
+</svg>
