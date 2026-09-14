@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+<style>
+text { font-family: Arial, sans-serif; fill:#202124; }
+.title { font-size:28px; font-weight:700; }
+.label { font-size:22px; font-weight:600; }
+.small { font-size:18px; }
+.box { fill:#f6f8fa; stroke:#57606a; stroke-width:2; rx:18; }
+.arrow { stroke:#57606a; stroke-width:4; fill:none; marker-end:url(#a); }
+.topic { fill:#eef6ff; stroke:#0969da; stroke-width:2; rx:12; }
+</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#57606a"/></marker></defs>
+
+<text x="500" y="42" text-anchor="middle" class="title">Иерархия MQTT-топиков</text>
+<rect x="355" y="75" width="290" height="55" class="topic"/>
+<text x="500" y="110" text-anchor="middle" class="small">iot_practice / USER_ID</text>
+<path d="M500 130 L500 165" class="arrow"/>
+<path d="M500 165 L230 205" class="arrow"/>
+<path d="M500 165 L500 205" class="arrow"/>
+<path d="M500 165 L770 205" class="arrow"/>
+<rect x="100" y="215" width="260" height="55" class="topic"/>
+<text x="230" y="250" text-anchor="middle" class="small">lamp</text>
+<rect x="370" y="215" width="260" height="55" class="topic"/>
+<text x="500" y="250" text-anchor="middle" class="small">sensor</text>
+<rect x="640" y="215" width="260" height="55" class="topic"/>
+<text x="770" y="250" text-anchor="middle" class="small">servers</text>
+<text x="230" y="315" text-anchor="middle" class="small">lamp/value · lamp/mode · lamp/color</text>
+<text x="500" y="315" text-anchor="middle" class="small">sensor/temperature · sensor/humidity</text>
+<text x="770" y="315" text-anchor="middle" class="small">servers/yandex · servers/aws · …</text>
+<text x="500" y="385" text-anchor="middle" class="small">Подписка: iot_practice/USER_ID/#</text>
+</svg>

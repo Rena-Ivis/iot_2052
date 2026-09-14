@@ -1,0 +1,10 @@
+# Изображения
+
+Схемы и анимация в этой папке подготовлены специально для данной Git-методички:
+- `mqtt_publish_subscribe.svg`
+- `mqtt_topics.svg`
+- `mqtt_message_flow.gif`
+- `sensor_broker_lamp.svg`
+- `esp32_mqtt_flow.svg`
+
+Они не зависят от авторизации в LMS и поэтому будут отображаться в GitHub/GitLab README.

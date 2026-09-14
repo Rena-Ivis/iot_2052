@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+<style>
+text { font-family: Arial, sans-serif; fill:#202124; }
+.title { font-size:28px; font-weight:700; }
+.label { font-size:22px; font-weight:600; }
+.small { font-size:18px; }
+.box { fill:#f6f8fa; stroke:#57606a; stroke-width:2; rx:18; }
+.arrow { stroke:#57606a; stroke-width:4; fill:none; marker-end:url(#a); }
+.topic { fill:#eef6ff; stroke:#0969da; stroke-width:2; rx:12; }
+</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#57606a"/></marker></defs>
+
+<text x="500" y="45" text-anchor="middle" class="title">Связываем устройства через MQTT</text>
+<rect x="50" y="130" width="250" height="125" class="box"/>
+<text x="175" y="177" text-anchor="middle" class="label">Смартфон</text>
+<text x="175" y="215" text-anchor="middle" class="small">датчик освещённости</text>
+<rect x="375" y="130" width="250" height="125" class="box"/>
+<text x="500" y="177" text-anchor="middle" class="label">MQTT Broker</text>
+<text x="500" y="215" text-anchor="middle" class="small">топики USER_ID</text>
+<rect x="700" y="130" width="250" height="125" class="box"/>
+<text x="825" y="177" text-anchor="middle" class="label">Лампа</text>
+<text x="825" y="215" text-anchor="middle" class="small">fake_lamp / ESP32</text>
+<path d="M300 192 L375 192" class="arrow"/>
+<path d="M625 192 L700 192" class="arrow"/>
+<text x="500" y="330" text-anchor="middle" class="small">Источник данных и исполнитель не соединяются напрямую</text>
+</svg>

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420">
+<style>
+text { font-family: Arial, sans-serif; fill:#202124; }
+.title { font-size:28px; font-weight:700; }
+.label { font-size:22px; font-weight:600; }
+.small { font-size:18px; }
+.box { fill:#f6f8fa; stroke:#57606a; stroke-width:2; rx:18; }
+.arrow { stroke:#57606a; stroke-width:4; fill:none; marker-end:url(#a); }
+.topic { fill:#eef6ff; stroke:#0969da; stroke-width:2; rx:12; }
+</style>
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#57606a"/></marker></defs>
+
+<text x="500" y="45" text-anchor="middle" class="title">Модель Publish / Subscribe</text>
+<rect x="55" y="135" width="235" height="115" class="box"/>
+<text x="172" y="180" text-anchor="middle" class="label">Publisher</text>
+<text x="172" y="215" text-anchor="middle" class="small">датчик / приложение</text>
+<rect x="382" y="120" width="235" height="145" class="box"/>
+<text x="500" y="175" text-anchor="middle" class="label">MQTT Broker</text>
+<text x="500" y="212" text-anchor="middle" class="small">принимает и маршрутизирует</text>
+<rect x="710" y="135" width="235" height="115" class="box"/>
+<text x="827" y="180" text-anchor="middle" class="label">Subscriber</text>
+<text x="827" y="215" text-anchor="middle" class="small">лампа / приложение</text>
+<path d="M290 192 L382 192" class="arrow"/>
+<path d="M617 192 L710 192" class="arrow"/>
+<text x="336" y="165" text-anchor="middle" class="small">PUBLISH</text>
+<text x="664" y="165" text-anchor="middle" class="small">доставка</text>
+<rect x="355" y="315" width="290" height="55" class="topic"/>
+<text x="500" y="350" text-anchor="middle" class="small">topic + payload</text>
+</svg>
