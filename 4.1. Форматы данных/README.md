@@ -334,6 +334,11 @@ ymaps.ready(function () {
 
 Для работы с MQTT в браузере используется JavaScript-клиент **Paho MQTT**. Поместите `paho-mqtt-min.js` в папку `js/`.
 
+Скачайте JavaScript client с projects.eclipse.org/projects/iot.paho.
+Распакуйте полученный zip-архив (paho.javascript-1.0.3.zip) и файл paho-mqtt-min.js сохраните в папку js/ проекта.
+
+Файл библиотеки Paho MQTT можно позаимствовать из проекта виртуальной лампочки
+
 Подключите скрипты:
 
 ```html
